@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import UpgradeButton from './UpgradeButton';
 
+const MAX_PDF_BYTES = 3 * 1024 * 1024;
+
 const SAMPLE_BAR = 'The Salt Line (sample)';
 const SAMPLE = `THE SALT LINE — SUMMER COCKTAIL MENU & SPECS
 
@@ -43,10 +45,45 @@ export default function Generator({ locked }) {
   const [error, setError] = useState('');
   const [needsUpgrade, setNeedsUpgrade] = useState(locked);
   const [busy, setBusy] = useState(false);
+  const [pdf, setPdf] = useState(null); // { name, data (base64) }
+  const [fileKey, setFileKey] = useState(0); // remounts the input so the same file can be re-picked
+
+  function clearPdf() {
+    setPdf(null);
+    setFileKey((k) => k + 1);
+  }
+
+  function onPickFile(e) {
+    const file = e.target.files?.[0];
+    setError('');
+    if (!file) return;
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (!isPdf) {
+      clearPdf();
+      setError('Only PDF files work for upload. For a photo or Word doc, paste the text instead.');
+      return;
+    }
+    if (file.size > MAX_PDF_BYTES) {
+      clearPdf();
+      setError('That PDF is too big. Keep it under 3 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      setPdf({ name: file.name, data: result.slice(result.indexOf(',') + 1) });
+    };
+    reader.onerror = () => {
+      clearPdf();
+      setError("Couldn't read that file. Try again.");
+    };
+    reader.readAsDataURL(file);
+  }
 
   function loadSample() {
     setBarName(SAMPLE_BAR);
     setMaterial(SAMPLE);
+    clearPdf();
     setError('');
   }
 
@@ -58,7 +95,7 @@ export default function Generator({ locked }) {
       const res = await fetch('/api/kits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barName, material }),
+        body: JSON.stringify({ barName, material, pdf: pdf?.data || null }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 402) setNeedsUpgrade(true);
@@ -88,14 +125,33 @@ export default function Generator({ locked }) {
         <span>Bar name</span>
         <input className="input" value={barName} onChange={(e) => setBarName(e.target.value)} placeholder="e.g. The Port" maxLength={120} required />
       </label>
+      <div className="field">
+        <span>Upload your menu (PDF)</span>
+        <input
+          key={fileKey}
+          className="input"
+          type="file"
+          accept="application/pdf,.pdf"
+          onChange={onPickFile}
+          aria-label="Upload menu PDF"
+        />
+        {pdf && (
+          <div className="row" style={{ marginTop: 8, alignItems: 'center' }}>
+            <span>📄 {pdf.name}</span>
+            <button type="button" className="btn ghost" onClick={clearPdf}>
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
       <label className="field">
-        <span>Menu, specs &amp; policies</span>
+        <span>{pdf ? 'Anything else? (optional: specs or house rules not in the PDF)' : 'Or paste your menu, specs & policies'}</span>
         <textarea
           className="input"
           value={material}
           onChange={(e) => setMaterial(e.target.value)}
           placeholder="Paste cocktail specs (ingredients, pours, glass, garnish), your draft list, pour sizes, and house rules…"
-          required
+          required={!pdf}
         />
       </label>
       <div className="row">
