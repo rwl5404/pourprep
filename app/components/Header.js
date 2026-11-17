@@ -9,7 +9,8 @@ export default function Header({ user }) {
       <nav className="nav">
         {user ? (
           <>
-            <Link href="/dashboard">Dashboard</Link>
+            <Link href="/dashboard">{user.role === 'staff' ? 'My training' : 'Dashboard'}</Link>
+            {user.role !== 'staff' && <Link href="/team">Team</Link>}
             <form action="/api/auth/logout" method="post">
               <button className="linkbtn" type="submit">Log out</button>
             </form>

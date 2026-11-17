@@ -1,6 +1,11 @@
 # PourPrep
 
-AI training kits for seasonal bar staff. Bar owners paste their menu, cocktail specs, and house policies; PourPrep's AI turns them into a training guide, spec flashcards, and a graded quiz for new hires.
+AI training kits for seasonal bar staff. Bar owners upload their menu PDF (or paste specs and house policies); PourPrep's AI turns it into a training guide, spec flashcards, and a graded quiz for new hires.
+
+## Accounts
+- **Owner**: anyone who signs up at `/signup`. Builds kits, manages billing, and gets a staff invite link on `/team`.
+- **Staff**: joins through the owner's invite link (`/join/<code>`). Can study the bar's kits and take quizzes, sees only their own scores, and can't build kits or pay.
+- Staff quiz attempts are graded on the server and saved. The owner's Team page shows each employee's latest and best score and the questions the team misses most.
 
 **Live:** https://pourprep-nine.vercel.app
 

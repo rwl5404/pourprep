@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-export default function KitView({ content }) {
+export default function KitView({ content, kitId, trackScores = false }) {
   const guide = content?.guide || { overview: '', sections: [] };
   const flashcards = content?.flashcards || [];
   const quiz = content?.quiz || [];
@@ -25,7 +25,7 @@ export default function KitView({ content }) {
       </div>
       {tab === 'guide' && <Guide guide={guide} />}
       {tab === 'cards' && <Flashcards cards={flashcards} />}
-      {tab === 'quiz' && <Quiz questions={quiz} />}
+      {tab === 'quiz' && <Quiz questions={quiz} kitId={kitId} trackScores={trackScores} />}
     </div>
   );
 }
@@ -80,9 +80,26 @@ function Flashcards({ cards }) {
   );
 }
 
-function Quiz({ questions }) {
+function Quiz({ questions, kitId, trackScores }) {
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [saveState, setSaveState] = useState(''); // '', 'saving', 'saved', 'error'
+
+  async function grade() {
+    setSubmitted(true);
+    if (!trackScores) return;
+    setSaveState('saving');
+    try {
+      const res = await fetch('/api/attempts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kitId, answers }),
+      });
+      setSaveState(res.ok ? 'saved' : 'error');
+    } catch {
+      setSaveState('error');
+    }
+  }
   if (!questions.length) return <p className="fine">No quiz questions in this kit.</p>;
 
   const score = questions.reduce((n, q, i) => n + (answers[i] === q.answer ? 1 : 0), 0);
@@ -91,6 +108,7 @@ function Quiz({ questions }) {
   function reset() {
     setAnswers({});
     setSubmitted(false);
+    setSaveState('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -106,6 +124,9 @@ function Quiz({ questions }) {
               ? 'Nearly there. Review the misses below, then try again.'
               : 'Not shift-ready yet. Study the flashcards and retake it.'}
           </p>
+          {saveState === 'saving' && <p className="fine">Saving your score…</p>}
+          {saveState === 'saved' && <p className="fine">Score saved. Your manager can see it.</p>}
+          {saveState === 'error' && <p className="fine" style={{ color: 'var(--bad)' }}>Couldn&apos;t save your score. Check your connection and retake to try again.</p>}
         </div>
       )}
       {questions.map((q, qi) => (
@@ -135,7 +156,7 @@ function Quiz({ questions }) {
         {submitted ? (
           <button className="btn" onClick={reset}>Retake quiz</button>
         ) : (
-          <button className="btn" onClick={() => setSubmitted(true)} disabled={!allAnswered}>
+          <button className="btn" onClick={grade} disabled={!allAnswered}>
             {allAnswered ? 'Grade my quiz' : `Answer all ${questions.length} to grade`}
           </button>
         )}

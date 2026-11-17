@@ -6,6 +6,7 @@ import UpgradeButton from './UpgradeButton';
 import { getUser } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { formatPrice } from '@/lib/stripe';
+import { barNameFor, isStaff, pct } from '@/lib/team';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Dashboard — PourPrep' };
@@ -14,8 +15,11 @@ export default async function Dashboard({ searchParams }) {
   const user = await getUser();
   if (!user) redirect('/login');
 
+  if (isStaff(user)) return <StaffDashboard user={user} />;
+
   const params = (await searchParams) || {};
   const sql = db();
+  const [{ staff_count }] = await sql`SELECT COUNT(*)::int AS staff_count FROM users WHERE owner_id = ${user.id} AND role = 'staff'`;
   const kits = await sql`
     SELECT id, bar_name, created_at,
       jsonb_array_length(content->'flashcards') AS cards,
@@ -75,6 +79,16 @@ export default async function Dashboard({ searchParams }) {
             )}
           </div>
 
+          <div className="card" style={{ marginTop: 18 }}>
+            <div className="panel-title">Your team</div>
+            <p className="panel-sub" style={{ marginBottom: 14 }}>
+              {staff_count
+                ? `${staff_count} staff member${staff_count === 1 ? '' : 's'} joined. See their quiz scores and the questions they keep missing.`
+                : 'Invite your staff with one link. They take the quizzes, and you see every score and weak spot.'}
+            </p>
+            <Link href="/team" className="btn ghost small">{staff_count ? 'View team progress' : 'Invite staff'}</Link>
+          </div>
+
           {!user.is_paid && (
             <div className="card upsell">
               <h3>Upgrade to PourPrep Pro</h3>
@@ -84,6 +98,80 @@ export default async function Dashboard({ searchParams }) {
               </p>
               <UpgradeButton />
             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+async function StaffDashboard({ user }) {
+  const sql = db();
+  const [bar, kits, attempts] = await Promise.all([
+    barNameFor(user.owner_id),
+    sql`
+      SELECT id, bar_name, created_at, jsonb_array_length(content->'quiz') AS questions
+      FROM kits WHERE user_id = ${user.owner_id} ORDER BY created_at DESC`,
+    sql`SELECT kit_id, score, total, created_at FROM quiz_attempts WHERE user_id = ${user.id} ORDER BY created_at DESC`,
+  ]);
+
+  const best = new Map();
+  for (const a of attempts) {
+    const b = best.get(a.kit_id);
+    if (!b || pct(a.score, a.total) > pct(b.score, b.total)) best.set(a.kit_id, a);
+  }
+  const kitName = new Map(kits.map((k) => [k.id, k.bar_name]));
+  const fmt = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  return (
+    <div className="wrap">
+      <Header user={user} />
+      <div className="dash-head">
+        <div>
+          <span className="badge">Staff · {bar}</span>
+          <h1>Your training</h1>
+          <p className="fine">{user.name || user.email}</p>
+        </div>
+      </div>
+
+      <div className="grid2">
+        <div className="card">
+          <div className="panel-title">Training kits</div>
+          {kits.length === 0 ? (
+            <p className="panel-sub">Your manager hasn&apos;t built a training kit yet. Check back soon.</p>
+          ) : (
+            <ul className="kit-list">
+              {kits.map((k) => {
+                const b = best.get(k.id);
+                return (
+                  <li key={k.id}>
+                    <Link href={`/kit/${k.id}`}>
+                      <strong>{k.bar_name}</strong>
+                      <small>
+                        {k.questions || 0} quiz questions ·{' '}
+                        {b ? `Best score ${b.score}/${b.total} (${pct(b.score, b.total)}%)` : 'Quiz not taken yet'}
+                      </small>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="panel-title">Your quiz history</div>
+          {attempts.length === 0 ? (
+            <p className="panel-sub">Open a kit, study the guide and flashcards, then take the quiz. Your scores show up here.</p>
+          ) : (
+            <ul className="kit-list">
+              {attempts.slice(0, 10).map((a, i) => (
+                <li key={i} style={{ padding: '10px 0' }}>
+                  <strong>{kitName.get(a.kit_id) || 'Training kit'}</strong>
+                  <small>{a.score}/{a.total} ({pct(a.score, a.total)}%) · {fmt(a.created_at)}</small>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>

@@ -6,6 +6,7 @@ export const runtime = 'nodejs';
 export async function POST(req) {
   const user = await getUser();
   if (!user) return Response.json({ error: 'Log in first.' }, { status: 401 });
+  if (user.role === 'staff') return Response.json({ error: 'Only the bar owner manages billing.' }, { status: 403 });
   if (user.is_paid) return Response.json({ error: 'You already have PourPrep Pro.' }, { status: 400 });
 
   const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;

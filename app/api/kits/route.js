@@ -12,6 +12,7 @@ const MAX_PDF_BASE64 = Math.ceil((3 * 1024 * 1024 * 4) / 3) + 4;
 export async function POST(req) {
   const user = await getUser();
   if (!user) return Response.json({ error: 'Log in to build a training kit.' }, { status: 401 });
+  if (user.role === 'staff') return Response.json({ error: 'Only the bar owner can build training kits.' }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
   const barName = String(body.barName || '').trim().slice(0, 120);
